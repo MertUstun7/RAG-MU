@@ -1,0 +1,125 @@
+services:
+  # ──────────────────────────────────────────────────────────────────────────
+  # PostgreSQL Database
+  # ──────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: ragmu_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-ragmu_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ragmu_password}
+      POSTGRES_DB: ${DB_NAME:-ragmu_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ragmu_user} -d ${DB_NAME:-ragmu_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Ollama - Local LLM Server
+  # ──────────────────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ragmu_ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # RAGMU FastAPI Application
+  # ──────────────────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ragmu_app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_URL: postgresql://${DB_USER:-ragmu_user}:${DB_PASSWORD:-ragmu_password}@postgres:5432/${DB_NAME:-ragmu_db}
+      OLLAMA_BASE_URL: http://ollama:11434
+      HOST: 0.0.0.0
+      PORT: "8000"
+    ports:
+      - "127.0.0.1:${APP_PORT:-8050}:8000"
+    volumes:
+      - chroma_data:/app/chroma_db
+      - temp_uploads:/app/temp_uploads
+      # HuggingFace model cache (avoids re-downloading on restart)
+      - hf_cache:/root/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # pgAdmin - Database Management UI
+  # ──────────────────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ragmu_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@ragmu.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+
+# ──────────────────────────────────────────────────────────────────────────
+# Named Volumes
+# ──────────────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  ollama_data:
+    driver: local
+  chroma_data:
+    driver: local
+  temp_uploads:
+    driver: local
+  pgadmin_data:
+    driver: local
+  hf_cache:
+    driver: local
