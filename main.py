@@ -1,8 +1,8 @@
-import logging
-import uvicorn
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -16,8 +16,9 @@ from rag_engine.presentation.routing import llm_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: create all DB tables if they don't exist yet
-    from db_operations.business_logic.db_tables import Base
     from db_operations.business_logic.db import engine
+    from db_operations.business_logic.db_tables import Base
+
     Base.metadata.create_all(bind=engine)
     yield
     # Shutdown logic (if needed) goes here
@@ -47,6 +48,7 @@ static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+
 # Root endpoint with API info
 @app.get("/api/info")
 async def api_info():
@@ -55,14 +57,16 @@ async def api_info():
         "name": "RAGMU RAG Studio",
         "version": "1.0",
         "status": "running",
-        "documentation": "/docs"
+        "documentation": "/docs",
     }
+
 
 # Health check endpoint
 @app.get("/api/health")
 async def health():
     """Health check endpoint"""
     return {"status": "healthy", "service": "RAGMU RAG Studio"}
+
 
 # Serve index.html for the root path
 @app.get("/")
@@ -78,10 +82,10 @@ async def serve_index():
         return FileResponse(root_index, media_type="text/html")
     return {"message": "RAGMU RAG Studio - Web UI not found", "api_docs": "/docs"}
 
+
 if __name__ == "__main__":
     # Get host and port from environment, with Docker-friendly defaults
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
-    
-    uvicorn.run(app, host=host, port=port, log_level="info")
 
+    uvicorn.run(app, host=host, port=port, log_level="info")

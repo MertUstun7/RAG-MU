@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # ──────────────────────────────────────────────────────────────────────────
   # PostgreSQL Database
@@ -19,6 +25,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *default-logging
 
   # ──────────────────────────────────────────────────────────────────────────
   # Ollama - Local LLM Server
@@ -32,7 +39,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     environment:
-      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-24h}
     deploy:
       resources:
         reservations:
@@ -46,41 +53,48 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
+    logging: *default-logging
 
   # ──────────────────────────────────────────────────────────────────────────
   # RAGMU FastAPI Application
   # ──────────────────────────────────────────────────────────────────────────
   app:
+    image: ${APP_IMAGE:-ragmu:local}
     build:
       context: .
       dockerfile: Dockerfile
     container_name: ragmu_app
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       DB_URL: postgresql://${DB_USER:-ragmu_user}:${DB_PASSWORD:-ragmu_password}@postgres:5432/${DB_NAME:-ragmu_db}
       OLLAMA_BASE_URL: http://ollama:11434
       HOST: 0.0.0.0
       PORT: "8000"
     ports:
-      - "127.0.0.1:${APP_PORT:-8050}:8000"
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
     volumes:
       - chroma_data:/app/chroma_db
       - temp_uploads:/app/temp_uploads
       # HuggingFace model cache (avoids re-downloading on restart)
-      - hf_cache:/root/.cache/huggingface
+      - hf_cache:/home/ragmu/.cache/huggingface
     depends_on:
       postgres:
         condition: service_healthy
       ollama:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 120s
+    logging: *default-logging
     deploy:
       resources:
         reservations:
@@ -106,6 +120,7 @@ services:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
       - postgres
+    logging: *default-logging
 
 # ──────────────────────────────────────────────────────────────────────────
 # Named Volumes

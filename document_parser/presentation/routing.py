@@ -1,21 +1,25 @@
 import shutil
+import uuid
 from pathlib import Path
 from typing import List, Optional
-from fastapi import Form, File, UploadFile
-from fastapi.routing import APIRouter
-import uuid
 
-from document_parser.business_logic.document_extractor import PageBasedExtractor
+from fastapi import File, Form, UploadFile
+from fastapi.routing import APIRouter
+
 from config import logger
+from document_parser.business_logic.document_extractor import PageBasedExtractor
 from vector_database.business_logic.vector_database_operations import VectorDb
 
 UPLOAD_DIR = Path("temp_uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
-content_extractor=APIRouter()
+content_extractor = APIRouter()
+
+
 @content_extractor.post("/content-extractor")
-async def file_extractor(collection_name: str = Form(""),
+async def file_extractor(
+    collection_name: str = Form(""),
     files: Optional[List[UploadFile]] = File(None),
-    urls: List[str]=Form([])
+    urls: List[str] = Form([]),
 ):
     UPLOAD_DIR = Path("temp_uploads")
     UPLOAD_DIR.mkdir(exist_ok=True)
@@ -36,10 +40,10 @@ async def file_extractor(collection_name: str = Form(""),
         rag_data = extractor.process_document(all_inputs)
         VectorDb(collection_name).add_documents(rag_data)
 
-        return {"OK":200, "inputs":all_inputs}
+        return {"OK": 200, "inputs": all_inputs}
 
     finally:
-            try:
-               shutil.rmtree("./temp_uploads",ignore_errors=True)
-            except Exception as e:
-                logger.error("Error deleting folder->{e}".format(e=e))
+        try:
+            shutil.rmtree("./temp_uploads", ignore_errors=True)
+        except Exception as e:
+            logger.error("Error deleting folder->{e}".format(e=e))

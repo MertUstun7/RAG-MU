@@ -1,55 +1,50 @@
-# ──────────────────────────────────────────────────────────────────────────────
-# RAGMU - Dockerfile
-# ──────────────────────────────────────────────────────────────────────────────
+# syntax=docker/dockerfile:1.7
+
 FROM python:3.11-slim
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HOME=/home/ragmu \
+    HF_HOME=/home/ragmu/.cache/huggingface
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    # PostgreSQL client libraries
-    libpq-dev \
-    # Build tools
-    gcc \
-    g++ \
-    # PDF processing (poppler for docling/docx2pdf)
-    poppler-utils \
-    # LibreOffice for .docx -> .pdf conversion
-    libreoffice \
-    # Git (some HuggingFace downloads need it)
-    git \
-    # Image processing
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create working directory
 WORKDIR /app
 
-# Copy and install Python dependencies first (layer caching)
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+# Keep compilers and development headers out of the final runtime filesystem.
+COPY requirements.txt ./
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        gcc \
+        g++ \
+        git \
+        libpq-dev \
+        poppler-utils \
+        libreoffice \
+        libgl1 \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender1 \
+    && python -m pip install --upgrade pip \
+    && python -m pip install --requirement requirements.txt \
+    && apt-get purge -y --auto-remove gcc g++ libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy application source code
-COPY . .
+ARG APP_UID=10001
+ARG APP_GID=10001
+RUN groupadd --gid "${APP_GID}" ragmu \
+    && useradd --uid "${APP_UID}" --gid ragmu --create-home --shell /usr/sbin/nologin ragmu \
+    && mkdir -p /app/temp_uploads /app/chroma_db "${HF_HOME}" \
+    && chown -R ragmu:ragmu /app /home/ragmu
 
-# Create required directories
-RUN mkdir -p /app/temp_uploads /app/chroma_db
+COPY --chown=ragmu:ragmu . .
 
-# Expose the application port
+USER ragmu
+
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)" || exit 1
 
-# Run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]

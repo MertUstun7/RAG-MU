@@ -12,6 +12,7 @@ A comprehensive RAG (Retrieval-Augmented Generation) system that combines docume
 - **Multi-modal Retrieval** - Retrieve both text and images based on queries
 - **Persistent Storage** - SQLAlchemy ORM with PostgreSQL and Chroma vector DB
 - **REST API** - FastAPI with full CORS support
+- **Automated Delivery** - GitHub Actions CI, CodeQL, Dependabot, and GHCR image publishing
 
 ## Technology Stack
 
@@ -293,6 +294,23 @@ To enable GPU acceleration for faster inference:
    ```
 
 ## Development
+
+### CI/CD and DevOps
+
+The repository includes automated linting, formatting, Python compilation, Compose validation,
+container builds, CodeQL security analysis, dependency updates, and versioned GHCR publishing.
+See [docs/DEVOPS.md](docs/DEVOPS.md) for pipeline behavior, repository settings, releases,
+deployments, and rollbacks.
+
+Run the fast CI checks locally with:
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .
+ruff format --check .
+python -m compileall -q .
+docker compose --env-file .env.example config --quiet
+```
 
 ### Hot Reload
 

@@ -1,0 +1,2 @@
+# Keep CI tooling separate from the large runtime/ML dependency set.
+ruff==0.15.14

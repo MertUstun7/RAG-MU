@@ -1,9 +1,11 @@
 import os
+
 import ollama
+
 from config import logger
 
-class ModelCollection:
 
+class ModelCollection:
     @staticmethod
     def get_local_models():
         try:
